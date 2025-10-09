@@ -1,6 +1,8 @@
 const express = require("express");
 const cors = require("cors");
 const userRoutes = require("./routes/user.routes");
+const chatRoutes = require("./routes/chat.routes");
+const messageRoutes = require("./routes/message.routes");
 
 // Antes das rotas
 
@@ -21,6 +23,8 @@ app.get("/", (req, res) => {
 });
 
 app.use("/users", userRoutes);
+app.use("/chatroom", chatRoutes);
+app.use("/messages", messageRoutes);
 
 connectToDatabase().then(() => {
   app.listen(PORT, () => {
