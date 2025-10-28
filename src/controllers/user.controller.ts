@@ -56,3 +56,36 @@ export const loginUser = async (req: Request, res: Response) => {
     res.status(500).json({ message: "Internal server error" })
   }
 }
+
+export const getUsers = async (req: Request, res: Response) => {
+  try {
+    const { email, name, page = 1, limit = 10, sort = "name" } = req.query
+
+    const filter: any = {}
+    if (email) filter.email = email
+    if (name) filter.name = { $regex: name, $options: "i" }
+
+    const pageNumber = Number(page)
+    const limitNumber = Number(limit)
+    const skip = (pageNumber - 1) * limitNumber
+
+    const users = await User.find(filter)
+      .select("-password -nickname")
+      .sort(sort)
+      .skip(skip)
+      .limit(limitNumber)
+
+    const totalUsers = await User.countDocuments(filter)
+    const totalPages = Math.ceil(totalUsers / limitNumber)
+
+    return res.status(200).json({
+      currentPage: pageNumber,
+      totalPages,
+      totalUsers,
+      results: users,
+    })
+  } catch (error) {
+    console.error("Erro ao listar usuários:", error)
+    return res.status(500).json({ error: "Erro interno no servidor" })
+  }
+}
