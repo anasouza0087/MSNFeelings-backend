@@ -2,14 +2,14 @@ import { Request, Response } from "express"
 import { Chat } from "../models/Chat"
 
 export const createChatroom = async (req: Request, res: Response) => {
-  const { name } = req.body
+  const { user, message } = req.body
 
-  if (!name) {
+  if (!user?.id) {
     return res.status(400).json({ message: "All fields are required!" })
   }
 
   try {
-    const newChatroom = await Chat.create({ name })
+    const newChatroom = await Chat.create({ user, message })
     res.status(201).json(newChatroom)
   } catch (error) {
     console.error("Erro ao criar chatroom:", error)
@@ -23,18 +23,20 @@ export const listChatrooms = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10
     const skip = (page - 1) * limit
 
-    // filtro pelo name (query string: ?name=algo)
+    // filtro pelo nome do usuário: ?name=algo
     const name = req.query.name as string
     const filter: any = {}
 
     if (name) {
-      filter.name = { $regex: name, $options: "i" } // "i" = case-insensitive
+      filter["user.name"] = { $regex: name, $options: "i" } // busca case-insensitive
     }
 
-    // busca paginada com filtro
-    const chatrooms = await Chat.find(filter, "_id name avatar")
+    // busca paginada
+    const chatrooms = await Chat.find(filter)
+      .select("_id user message") // seleciona apenas os campos relevantes
       .skip(skip)
       .limit(limit)
+      .lean() // melhora performance (retorna objetos JS simples)
 
     const total = await Chat.countDocuments(filter)
 
