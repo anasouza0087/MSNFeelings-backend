@@ -2,41 +2,62 @@ import { Request, Response } from "express"
 import { Chat } from "../models/Chat"
 
 export const createChatroom = async (req: Request, res: Response) => {
-  const { user, message } = req.body
+  const { participants, message } = req.body
 
-  if (!user?.id) {
-    return res.status(400).json({ message: "All fields are required!" })
+  if (
+    !participants ||
+    !Array.isArray(participants) ||
+    participants.length < 2
+  ) {
+    return res
+      .status(400)
+      .json({ message: "São necessários pelo menos dois participantes" })
   }
 
   try {
-    const newChatroom = await Chat.create({ user, message })
-    res.status(201).json(newChatroom)
+    // evita criar duplicado com mesmos participantes
+    const existingChat = await Chat.findOne({
+      "participants.id": { $all: participants.map((p) => p.id) },
+      $expr: { $eq: [{ $size: "$participants" }, participants.length] },
+    })
+
+    if (existingChat) {
+      return res.status(200).json(existingChat)
+    }
+
+    const newChat = await Chat.create({
+      participants,
+      message,
+    })
+
+    res.status(201).json(newChat)
   } catch (error) {
     console.error("Erro ao criar chatroom:", error)
-    res.status(500).json({ message: "Internal server error" })
+    res.status(500).json({ message: "Erro interno do servidor" })
   }
 }
 
 export const listChatrooms = async (req: Request, res: Response) => {
   try {
+    const userId = req.query.userId as string
     const page = parseInt(req.query.page as string) || 1
     const limit = parseInt(req.query.limit as string) || 10
     const skip = (page - 1) * limit
 
-    // filtro pelo nome do usuário: ?name=algo
-    const name = req.query.name as string
-    const filter: any = {}
-
-    if (name) {
-      filter["user.name"] = { $regex: name, $options: "i" } // busca case-insensitive
+    if (!userId) {
+      return res.status(400).json({ message: "userId é obrigatório" })
     }
+
+    // somente os chats onde o usuário participa
+    const filter: any = { "participants.id": userId }
 
     // busca paginada
     const chatrooms = await Chat.find(filter)
-      .select("_id user message") // seleciona apenas os campos relevantes
+      .select("_id participants message updatedAt")
+      .sort({ updatedAt: -1 })
       .skip(skip)
       .limit(limit)
-      .lean() // melhora performance (retorna objetos JS simples)
+      .lean()
 
     const total = await Chat.countDocuments(filter)
 
@@ -51,22 +72,22 @@ export const listChatrooms = async (req: Request, res: Response) => {
     })
   } catch (error) {
     console.error("Erro ao listar chatrooms:", error)
-    res.status(500).json({ message: "Internal server error" })
+    res.status(500).json({ message: "Erro interno do servidor" })
   }
 }
 
 export const getChatroomById = async (req: Request, res: Response) => {
   const { chatroomId } = req.params
-  console.log(chatroomId)
 
   try {
-    const chatroom = await Chat.find({ _id: chatroomId })
-    console.log(chatroom)
-
+    const chatroom = await Chat.findById(chatroomId)
+    if (!chatroom) {
+      return res.status(404).json({ message: "Chat não encontrado" })
+    }
     res.status(200).json(chatroom)
   } catch (error) {
     console.error("Erro ao buscar chatroom:", error)
-    res.status(500).json({ message: "Internal server error" })
+    res.status(500).json({ message: "Erro interno do servidor" })
   }
 }
 
