@@ -1,5 +1,6 @@
 import { Request, Response } from "express"
 import { Chat } from "../models/Chat"
+import { Message } from "../models/Message"
 
 export const createChatroom = async (req: Request, res: Response) => {
   const { participants, message } = req.body
@@ -37,6 +38,45 @@ export const createChatroom = async (req: Request, res: Response) => {
   }
 }
 
+// export const listChatrooms = async (req: Request, res: Response) => {
+//   try {
+//     const userId = req.query.userId as string
+//     const page = parseInt(req.query.page as string) || 1
+//     const limit = parseInt(req.query.limit as string) || 10
+//     const skip = (page - 1) * limit
+
+//     if (!userId) {
+//       return res.status(400).json({ message: "userId é obrigatório" })
+//     }
+
+//     // somente os chats onde o usuário participa
+//     const filter: any = { "participants.id": userId }
+
+//     // busca paginada
+//     const chatrooms = await Chat.find(filter)
+//       .select("_id participants message updatedAt")
+//       .sort({ updatedAt: -1 })
+//       .skip(skip)
+//       .limit(limit)
+//       .lean()
+
+//     const total = await Chat.countDocuments(filter)
+
+//     res.status(200).json({
+//       data: chatrooms,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         totalPages: Math.ceil(total / limit),
+//       },
+//     })
+//   } catch (error) {
+//     console.error("Erro ao listar chatrooms:", error)
+//     res.status(500).json({ message: "Erro interno do servidor" })
+//   }
+// }
+
 export const listChatrooms = async (req: Request, res: Response) => {
   try {
     const userId = req.query.userId as string
@@ -48,10 +88,8 @@ export const listChatrooms = async (req: Request, res: Response) => {
       return res.status(400).json({ message: "userId é obrigatório" })
     }
 
-    // somente os chats onde o usuário participa
-    const filter: any = { "participants.id": userId }
+    const filter = { "participants.id": userId }
 
-    // busca paginada
     const chatrooms = await Chat.find(filter)
       .select("_id participants message updatedAt")
       .sort({ updatedAt: -1 })
@@ -59,10 +97,21 @@ export const listChatrooms = async (req: Request, res: Response) => {
       .limit(limit)
       .lean()
 
+    // ✅ Checa se o usuário tem mensagens não lidas
+    const chatroomsWithUnread = await Promise.all(
+      chatrooms.map(async (chat) => {
+        const unreadExists = await Message.exists({
+          chatroomId: chat._id,
+          readBy: { $ne: userId },
+        })
+        return { ...chat, hasUnread: !!unreadExists }
+      })
+    )
+
     const total = await Chat.countDocuments(filter)
 
     res.status(200).json({
-      data: chatrooms,
+      data: chatroomsWithUnread,
       pagination: {
         total,
         page,
