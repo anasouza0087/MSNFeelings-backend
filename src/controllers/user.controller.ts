@@ -1,5 +1,7 @@
 import { Request, Response } from "express"
 import { User } from "../models/User"
+import * as jwt from "jsonwebtoken"
+import * as bcrypt from "bcrypt"
 
 export const createUser = async (req: Request, res: Response) => {
   const { name, password, email, avatar } = req.body
@@ -29,6 +31,7 @@ export const createUser = async (req: Request, res: Response) => {
 }
 
 export const loginUser = async (req: Request, res: Response) => {
+  const SECRET_KEY = "segredo123"
   const { email, password } = req.body
 
   if (!email || !password) {
@@ -42,18 +45,25 @@ export const loginUser = async (req: Request, res: Response) => {
       return res.status(401).json({ message: "User not found" })
     }
 
-    // Compara as senhas
-    const isMatch = await user.comparePassword(password)
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid password" })
-    }
+    const isPasswordValid = await bcrypt.compare(password, user.password)
+    if (!isPasswordValid)
+      return res.status(401).json({ error: "Senha incorreta" })
 
-    // Se tudo estiver ok, retorna os dados do usuário (sem a senha)
-    const { password: _, ...userWithoutPassword } = user.toObject()
-    res.status(200).json(userWithoutPassword)
-  } catch (error) {
-    console.error("Login error:", error)
-    res.status(500).json({ message: "Internal server error" })
+    const token = jwt.sign({ id: user._id, email: user.email }, SECRET_KEY, {
+      expiresIn: "1d",
+    })
+
+    res.json({
+      message: "Login realizado com sucesso",
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ error: "Erro ao fazer login" })
   }
 }
 
